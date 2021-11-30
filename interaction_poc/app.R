@@ -14,60 +14,100 @@ library(plotly)
 library(purrr)
 library(readr)
 
-iris_dt <- as.data.table(iris)[sample(1:.N, 25)]
-iris_dt[ , weight := 1]
+
+valueBox <- function(value, subtitle, icon, color) {
+  div(class = "col-lg-3 col-md-6",
+      div(class = "panel panel-primary",
+          div(class = "panel-heading", style = paste0("background-color:", color),
+              div(class = "row",
+                  div(class = "col-xs-3",
+                      icon(icon, "fa-5x")
+                  ),
+                  div(class = ("col-xs-9 text-right"),
+                      div(style = ("font-size: 56px; font-weight: bold;"),
+                          textOutput(value)
+                      ),
+                      div(subtitle)
+                  )
+              )
+          ),
+          div(class = "panel-footer",
+              div(class = "clearfix")
+          )
+      )
+  )
+}
 
 draw_dt <- data.table(x = runif(10))
 draw_dt[ , y := x + runif(10)/10]
 draw_dt[ , weight := 1]
 
+marker_radius <- 6
+
 # Define UI for application that draws a histogram
 ui <- fluidPage(
+  h1("Two-way interaction between plots and tables"),
+  p("Hi, welcome to this demonstration of two-way interactions between plots and tables in Shiny!"),
+  p("The goal of this app is to show some of the ways you can interact with your data through tables and plots and how they can share information with each others"),
+  p("We will demonstrate how you can interact with your data in the context of analysing the impact of data points on the result of a linear model"),
+  h3("Selecting data points"),
+  h4("table interaction"),
+  p("you can select a data point by clicking anywhere on the corresponding row of the table"),
+  p("Selected lines will be highlighted in blue."),
+  p("You can select multiple lines and you can deselect any lines by clicking on it again,"),
+  h5(strong("TRY IT!")),
+  p("Notice how when you select a line in the table it affects the color of the corresponding data points in the plot"),
+  p("This allow you to quickly identify which lines correspond to which data points"),
+  h4("plot interaction") ,
+  p("If you click and drag anyway on the plot , you'll see a dotted box appear."),
+  p("You can click and drag to create a box around any data points to select them. Any points that are within the box area will be selected."),
+  h5(strong("TRY IT!")),
+  p("Once again, the selected data points will change color to give visual feedback about their current state"),
+  p("You can deselect data points by selecting an empty area of the plot"),
+  p("If look at the table, you'll see that the corresponding rows of the points you have selected are now highlighted in blue"),
+  p("That's what two-way interaction looks like , you can select data points on both the table and the plot and both will always be updated"),
+  h3("Adding and deleting data points"),
+  p("Once you have selected data points you can delete them if you want."),
+  p("Select some data points either using the table or the plot and then press the button labeled 'remove data point(s)'"),
+  p("Notice how the point have been deleted on both the table and the plot."),
+  p("You can also add new data point by pressing the button labeled 'add data point'"),
+  p("Notice how newly added data point are automatically selected to allow you to identify them quickly"),
+  h3("Change the coordinates of a data point"),
+  h4("Table interaction"),
+  p("You can change the coordinates of any data point by editing the values of any cells in the column 'x' and 'y which represent the coordinate of each data points."),
+  p("To edit a cell double click on an existing number, an editing box should appear allowing to change the value, click anywhere outside the box to confirmed the newly entered value."),
+  p("Notice how if affects the position of the data point on the plot in real time!"),
+  p("You can also the impact of the new coordinates on the linear model in real time."),
+  h4("plot interaction"),
+  p("The most intuitive way to change the coordinate of a data point when interacting with a plot is to simply grab the data point and move it around"),
+  h5(strong("TRY IT!")),
+  p("grab any point by moving your cursor to it and clicking and holding your mouse left-click button, move the data point around and let go your left-click button when your happy with the new coordinates"),
+  p("Notice how the table is updated with the new coordinates automatically"),
+  p("This is once again an example of two-way interaction where you can update the coordinates values either on the table or on the plot and both are always in sync with each others"),
+  h3("Editing weight"),
+  h4("Table interaction"),
+  p("You can edit the weight of any point the same way you did for the coordinates in the table by double-clicking on any weight values in the table and input the new value"),
+  h5(strong("TRY IT!")),
+  p("Notice how the size of the corresponding marker has changed according to the newly inputed weight value!"),
+  h4("Plot interaction"),
+  p("If you place your cursor, directly on the perimeter of any markers in the plot, you'll notice that your cursor will transform into a two-sided arrow."),
+  p("If you click and hold the left-click button of your mouse and move in any direction, you will be able to resize the marker."),
+  p("Once you let go the left-click button of your mouse, the weight value for this data point will be updated."),
+  p("Notice how the new weight value is updated in the table and how it affected the result of the linear model"),
+  
+  
   plotlyOutput("draw_plot"),
-  DTOutput("draw_table"),
   actionButton("add_point", "add new data point"),
-  actionButton("remove_point", "remove data point(s)")
+  actionButton("remove_point", "remove data point(s)"),
+  DTOutput("draw_table"),
+  br(),
+  valueBox(value = 'rmse_box', subtitle = "RMSE", icon =  'tachometer-alt', color = "#fcba03")
 
 )
 
 # Define server logic required to draw a histogram
 server <- function(input, output) {
-  # output$input_dt <- DT::renderDT(datatable(iris_dt, editable = list(target  = 'cell', disable = list(columns = 1:(ncol(iris_dt)-1))), selection = list(target = 'row')))
-  # 
-  # train_dt <- reactive({
-  #   if (length(input$input_dt_rows_selected) == 0) {
-  #     iris_dt[0]
-  #   } else {
-  #     iris_dt[input$input_dt_rows_selected]
-  #   }
-  # })
-  # 
-  # #output$post_dt <- renderDT(data.table(train_dt()))
-  # 
-  # model_obj <- reactive({
-  #   lm(Sepal.Length ~ Petal.Length, data = train_dt(), weights = train_dt()$weight)
-  # })
-  # 
-  # output$model_plot <- renderPlotly({
-  #   if (length(input$input_dt_rows_selected) == 0) {
-  #     plot_ly(iris_dt) %>%
-  #       add_trace(x = ~Petal.Length, y = ~Sepal.Length, type = 'scatter', mode = "markers")
-  #   }
-  #   else {
-  #     plot_ly(iris_dt) %>%
-  #       add_trace(x = ~Petal.Length, y = ~Sepal.Length, type = 'scatter', mode = "markers") %>%
-  #       add_trace(x = seq(1,7,0.5), y = predict(model_obj(), newdata = data.table(Petal.Length = seq(1,7,0.5))), type = 'scatter', mode = 'lines')
-  #   }
-  #  
-  # })
-  # 
-  # 
-  # 
-  # 
-  # output$model_summary <- renderPrint({
-  #   event_data("plotly_relayout")
-  # })
-  # 
+ 
   rv <- reactiveValues(
     x = draw_dt$x,
     y = draw_dt$y,
@@ -100,12 +140,12 @@ server <- function(input, output) {
                       xanchor = .x,
                       yanchor = .y,
                       # give each circle a 2 pixel diameter
-                      x0 = -4, x1 = 4,
-                      y0 = -4, y1 = 4,
+                      x0 = -marker_radius, x1 = marker_radius,
+                      y0 = -marker_radius, y1 = marker_radius,
                       xsizemode = "pixel", 
                       ysizemode = "pixel",
                       # other visual properties
-                      fillcolor = "blue",
+                      fillcolor = '#398ded',
                       line = list(color = "transparent")
                     )
     )
@@ -119,7 +159,7 @@ server <- function(input, output) {
 
     if (!is.na(rv$selected_lines[1])) {
       for (i in rv$selected_lines) {
-        circles[[i]]$fillcolor <- "orange"
+        circles[[i]]$fillcolor <- "#fcba03"
       }
     
     }
@@ -127,7 +167,7 @@ server <- function(input, output) {
     
     # plot the shapes and fitted line
     plot_ly() %>%
-      add_lines(x = grid()$x, y = predict(model(), grid()), color = I("red")) %>%
+      add_lines(x = grid()$x, y = predict(model(), grid()), color = I("#b75de8")) %>%
       event_register("plotly_brushed") %>%
       layout(shapes = circles, dragmode = "select") %>%
       config(edits = list(shapePosition = TRUE)) 
@@ -142,21 +182,39 @@ server <- function(input, output) {
     ed <- event_data("plotly_relayout")
     print(ed)
     shape_anchors <- ed[grepl("^shapes.*anchor$", names(ed))]
-    if (length(shape_anchors) != 2) return()
-    row_index <- unique(parse_number(names(shape_anchors)) + 1)
+    shapes <- ed[grepl("^shapes.*[0-1]$", names(ed))]
+ 
+    if (length(shape_anchors) == 2) {
+      row_index <- unique(parse_number(names(shape_anchors)) + 1)
+      pts <- as.numeric(shape_anchors)
+      rv$x[row_index] <- pts[1]
+      rv$y[row_index] <- pts[2]
+      
+      replaceData(proxy, data.table(x = rv$x , y = rv$y, weight = rv$w), resetPaging = FALSE, clearSelection = 'none')  # important
+      
+    }
+    
+    if (length(shapes) == 4) {
+      row_index <- unique(parse_number(names(shapes)) + 1)
+      print(names(shapes))
+      pts <-  as.numeric(shapes)
+      delta_x <- pts[4] - pts[3]
+      delta_y <- pts[1] - pts[2]
+      max_delta <- max(delta_x, delta_y)
+      rv$w[row_index] <- (max_delta/2)/marker_radius
+      replaceData(proxy, data.table(x = rv$x , y = rv$y, weight = rv$w), resetPaging = FALSE, clearSelection = 'none')  # important
+      
+    }
    
-    pts <- as.numeric(shape_anchors)
-    rv$x[row_index] <- pts[1]
-    rv$y[row_index] <- pts[2]
-    
-    replaceData(proxy, data.table(x = rv$x , y = rv$y, weight = rv$w), resetPaging = FALSE, clearSelection = 'none')  # important
-    
   })
   
 
   
   output$draw_table <- renderDT({
-    datatable(draw_dt, editable = T, selection = list(mode = 'multiple', target = 'row'), options = list(pageLength = -1, dom = 't'))
+    datatable(draw_dt, editable = T, selection = list(mode = 'multiple', target = 'row'), options = list(pageLength = -1, dom = 't',  initComplete = JS(
+      "function(settings, json) {",
+      "$(this.api().table().header()).css({'background-color': '#398ded', 'color': 'white'});",
+      "}")))
   })
   
   proxy <- dataTableProxy('draw_table')
@@ -210,8 +268,15 @@ server <- function(input, output) {
     rv$selected_lines <- NA
   })
   
-   
-
+  rmse <- reactive({
+    sqrt(sum(predict(model(), data.table(x = rv$x)) - rv$y)^2)
+  })
+  
+  output$rmse_box <- renderText({
+    rmse()
+  })
+  
+  
 }
 
 # Run the application 
