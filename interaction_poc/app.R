@@ -275,7 +275,12 @@ server <- function(input, output) {
   })
   
   output$rmse_box <- renderText({
-    rmse()
+    if (length(rv$x) == 0) {
+      return("No model provided")
+    } else {
+      rmse()
+      
+    }
   })
   
   

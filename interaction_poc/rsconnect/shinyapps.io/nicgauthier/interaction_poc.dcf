@@ -5,9 +5,9 @@ account: nicgauthier
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 5229800
-bundleId: 5308007
+bundleId: 5311481
 url: https://nicgauthier.shinyapps.io/interaction_poc/
-when: 1638243302.54426
-lastSyncTime: 1638243302.54426
+when: 1638308843.33014
+lastSyncTime: 1638308843.33014
 asMultiple: FALSE
 asStatic: FALSE
