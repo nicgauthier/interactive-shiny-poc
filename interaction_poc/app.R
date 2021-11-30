@@ -23,71 +23,75 @@ draw_dt[ , weight := 1]
 
 # Define UI for application that draws a histogram
 ui <- fluidPage(
-  DTOutput("input_dt"),
-  plotlyOutput("model_plot"),
   plotlyOutput("draw_plot"),
   DTOutput("draw_table"),
-  #DTOutput("post_dt"),
-  textOutput("model_summary")
-  
+  actionButton("add_point", "add new data point"),
+  actionButton("remove_point", "remove data point(s)")
+
 )
 
 # Define server logic required to draw a histogram
 server <- function(input, output) {
-  output$input_dt <- DT::renderDT(datatable(iris_dt, editable = list(target  = 'cell', disable = list(columns = 1:(ncol(iris_dt)-1))), selection = list(target = 'row')))
-  
-  train_dt <- reactive({
-    if (length(input$input_dt_rows_selected) == 0) {
-      iris_dt[0]
-    } else {
-      iris_dt[input$input_dt_rows_selected]
-    }
-  })
-  
-  #output$post_dt <- renderDT(data.table(train_dt()))
-  
-  model_obj <- reactive({
-    lm(Sepal.Length ~ Petal.Length, data = train_dt(), weights = train_dt()$weight)
-  })
-  
-  output$model_plot <- renderPlotly({
-    if (length(input$input_dt_rows_selected) == 0) {
-      plot_ly(iris_dt) %>%
-        add_trace(x = ~Petal.Length, y = ~Sepal.Length, type = 'scatter', mode = "markers")
-    }
-    else {
-      plot_ly(iris_dt) %>%
-        add_trace(x = ~Petal.Length, y = ~Sepal.Length, type = 'scatter', mode = "markers") %>%
-        add_trace(x = seq(1,7,0.5), y = predict(model_obj(), newdata = data.table(Petal.Length = seq(1,7,0.5))), type = 'scatter', mode = 'lines')
-    }
-   
-  })
-  
-
-
-  
-  output$model_summary <- renderPrint({
-    event_data("plotly_relayout")
-  })
-  
+  # output$input_dt <- DT::renderDT(datatable(iris_dt, editable = list(target  = 'cell', disable = list(columns = 1:(ncol(iris_dt)-1))), selection = list(target = 'row')))
+  # 
+  # train_dt <- reactive({
+  #   if (length(input$input_dt_rows_selected) == 0) {
+  #     iris_dt[0]
+  #   } else {
+  #     iris_dt[input$input_dt_rows_selected]
+  #   }
+  # })
+  # 
+  # #output$post_dt <- renderDT(data.table(train_dt()))
+  # 
+  # model_obj <- reactive({
+  #   lm(Sepal.Length ~ Petal.Length, data = train_dt(), weights = train_dt()$weight)
+  # })
+  # 
+  # output$model_plot <- renderPlotly({
+  #   if (length(input$input_dt_rows_selected) == 0) {
+  #     plot_ly(iris_dt) %>%
+  #       add_trace(x = ~Petal.Length, y = ~Sepal.Length, type = 'scatter', mode = "markers")
+  #   }
+  #   else {
+  #     plot_ly(iris_dt) %>%
+  #       add_trace(x = ~Petal.Length, y = ~Sepal.Length, type = 'scatter', mode = "markers") %>%
+  #       add_trace(x = seq(1,7,0.5), y = predict(model_obj(), newdata = data.table(Petal.Length = seq(1,7,0.5))), type = 'scatter', mode = 'lines')
+  #   }
+  #  
+  # })
+  # 
+  # 
+  # 
+  # 
+  # output$model_summary <- renderPrint({
+  #   event_data("plotly_relayout")
+  # })
+  # 
   rv <- reactiveValues(
     x = draw_dt$x,
     y = draw_dt$y,
-    w = draw_dt$weight
+    w = draw_dt$weight,
+    selected_lines = NA
   )
   
-  draw_dt <- reactive(data.table(x = rv$x, rv$y))
+
+
+
   
   grid <- reactive({
-    data.frame(x = seq(min(rv$x), max(rv$x), length = 10))
+    data.table(x = seq(min(rv$x), max(rv$x), length = 10))
   })
   model <- reactive({
-    d <- data.frame(x = rv$x, y = rv$y)
+    d <- data.table(x = rv$x, y = rv$y)
     lm(y ~ x, d, weights = rv$w)
   })
   
   output$draw_plot <- renderPlotly({
-    
+
+    validate(
+      need(length(rv$x) > 0, "use the button to add new data points")
+    )
     # creates a list of circle shapes from x/y data
     circles <- map2(rv$x, rv$y, 
                     ~list(
@@ -113,16 +117,20 @@ server <- function(input, output) {
       circles[[i]]$y1 <- circles[[i]]$y1 * rv$w[i]
     }
 
-    if (length(input$draw_table_rows_selected) > 0) {
-      circles[[input$draw_table_rows_selected]]$fillcolor <- "orange"
+    if (!is.na(rv$selected_lines[1])) {
+      for (i in rv$selected_lines) {
+        circles[[i]]$fillcolor <- "orange"
+      }
+    
     }
 
     
     # plot the shapes and fitted line
     plot_ly() %>%
       add_lines(x = grid()$x, y = predict(model(), grid()), color = I("red")) %>%
-      layout(shapes = circles) %>%
-      config(edits = list(shapePosition = TRUE))
+      event_register("plotly_brushed") %>%
+      layout(shapes = circles, dragmode = "select") %>%
+      config(edits = list(shapePosition = TRUE)) 
   })
   
   output$summary <- renderPrint({a
@@ -136,14 +144,19 @@ server <- function(input, output) {
     shape_anchors <- ed[grepl("^shapes.*anchor$", names(ed))]
     if (length(shape_anchors) != 2) return()
     row_index <- unique(parse_number(names(shape_anchors)) + 1)
-
+   
     pts <- as.numeric(shape_anchors)
     rv$x[row_index] <- pts[1]
     rv$y[row_index] <- pts[2]
+    
+    replaceData(proxy, data.table(x = rv$x , y = rv$y, weight = rv$w), resetPaging = FALSE, clearSelection = 'none')  # important
+    
   })
   
+
+  
   output$draw_table <- renderDT({
-    datatable(data.table(x = rv$x, y = rv$y, weight = rv$w), editable = T, selection = list(mode = 'single', target = 'row'))
+    datatable(draw_dt, editable = T, selection = list(mode = 'multiple', target = 'row'), options = list(pageLength = -1, dom = 't'))
   })
   
   proxy <- dataTableProxy('draw_table')
@@ -164,10 +177,37 @@ server <- function(input, output) {
       rv$w[i] <- DT::coerceValue(v, rv$w[i])
     }
     
-    temp_selected <- input$draw_table_rows_selected
-    
     replaceData(proxy, data.table(x = rv$x , y = rv$y, weight = rv$w), resetPaging = FALSE, clearSelection = 'none')  # important
 
+  })
+  
+  observeEvent(event_data("plotly_brushed", priority = 'event'),{
+    ed_brushed <- event_data("plotly_brushed")
+    rv$selected_lines <- which(rv$x >= ed_brushed$x[1] & rv$x <= ed_brushed$x[2] & rv$y >= ed_brushed$y[1] & rv$y <= ed_brushed$y[2])
+    selectRows(proxy, rv$selected_lines)
+  })
+  
+  observeEvent(input$draw_table_rows_selected,{
+    rv$selected_lines <- input$draw_table_rows_selected
+  })
+  
+  observeEvent(input$add_point, {
+    rv$x <- c(rv$x, 0.5)
+    rv$y <- c(rv$y, 0.5)
+    rv$w <- c(rv$w, 1)
+    rv$selected_lines <- length(rv$x)
+    selectRows(proxy, rv$selected_lines)
+    replaceData(proxy, data.table(x = rv$x , y = rv$y, weight = rv$w), resetPaging = FALSE, clearSelection = 'none')  # important
+  
+  })
+  
+  
+  observeEvent(input$remove_point, {
+    rv$x <- rv$x[-rv$selected_lines]
+    rv$y <- rv$y[-rv$selected_lines]
+    rv$w <- rv$w[-rv$selected_lines]
+    replaceData(proxy, data.table(x = rv$x , y = rv$y, weight = rv$w), resetPaging = FALSE, clearSelection = 'all')  # important
+    rv$selected_lines <- NA
   })
   
    
