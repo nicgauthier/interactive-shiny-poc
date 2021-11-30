@@ -38,6 +38,42 @@ valueBox <- function(value, subtitle, icon, color) {
   )
 }
 
+
+validate_user_csv <- function(user_csv) {
+  names_csv <- names(user_csv)
+  
+  if(user_csv[ , .N] == 0) {
+    return(list(valid = FALSE,
+                message = paste0("csv contains no data points")))
+  }
+  
+  if(!all(names_csv %in% c("x", "y", "weight"))) {
+    return(list(valid = FALSE,
+                message = paste0("csv does not contain all necessary column \n", "missing column(s) : ", names_csv[!(names_csv %in% c("x", "y", "weight"))])))
+  }
+  
+  typeof_csv <- user_csv[ , lapply(.SD, function(x) typeof(x) %in% c("integer", "double"))]
+  if (!all(typeof_csv)) {
+    return(list(valid = FALSE,
+                message = paste0("type of following columns :", names_csv[!typeof_csv], "\n is not either an integer or a double")))
+    
+  }
+  
+  which_neg_weight <- which(user_csv$weight < 0)
+  if (length(which_neg_weight) > 0) {
+    if (length(which_neg_weight) == 1) {
+      return(list(valid = FALSE,
+                  message = paste0("weight value for line number ", which_neg_weight, " is negative")))
+    } else {
+      return(list(valid = FALSE,
+                  message = paste0("weight value for lines number ", which_neg_weight, " are negative")))
+    }
+  }
+  
+  return(list(valid = TRUE,
+              message = "csv passed all checks"))
+}
+
 draw_dt <- data.table(x = runif(10))
 draw_dt[ , y := x + runif(10)/10]
 draw_dt[ , weight := 1]
@@ -95,7 +131,7 @@ ui <- fluidPage(
   p("Once you let go the left-click button of your mouse, the weight value for this data point will be updated."),
   p("Notice how the new weight value is updated in the table and how it affected the result of the linear model"),
   
-  
+  fileInput("input_csv", "Import csv", accept = '.csv'),
   plotlyOutput("draw_plot"),
   actionButton("add_point", "add new data point"),
   actionButton("remove_point", "remove data point(s)"),
@@ -110,11 +146,30 @@ ui <- fluidPage(
 # Define server logic required to draw a histogram
 server <- function(input, output) {
  
+  observeEvent(input$input_csv, {
+    user_csv <- fread(input$input_csv$datapath)
+    csv_check <- validate_user_csv(user_csv)
+    if (csv_check$valid) {
+      rv$x <- user_csv$x
+      rv$y <- user_csv$y
+      rv$w <- user_csv$weight
+      replaceData(proxy, data.table(x = rv$x , y = rv$y, weight = rv$w), resetPaging = FALSE, clearSelection = 'none')  # important
+    } else {
+      showModal(modalDialog(
+        title = "Error when importing csv",
+        paste0(csv_check$message, "\n the csv was not imported"),
+        easyClose = TRUE,
+        footer = NULL
+      ))
+    }
+  
+  })
+  
   rv <- reactiveValues(
     x = draw_dt$x,
     y = draw_dt$y,
     w = draw_dt$weight,
-    selected_lines = NA
+    selected_lines = NULL
   )
   
 
@@ -159,7 +214,7 @@ server <- function(input, output) {
       circles[[i]]$y1 <- circles[[i]]$y1 * rv$w[i]
     }
 
-    if (!is.na(rv$selected_lines[1])) {
+    if (!is.null(rv$selected_lines[1])) {
       for (i in rv$selected_lines) {
         circles[[i]]$fillcolor <- "#fcba03"
       }
@@ -249,6 +304,7 @@ server <- function(input, output) {
   
   observeEvent(input$draw_table_rows_selected,{
     rv$selected_lines <- input$draw_table_rows_selected
+    print(rv$selected_lines)
   })
   
   observeEvent(input$add_point, {
@@ -267,7 +323,7 @@ server <- function(input, output) {
     rv$y <- rv$y[-rv$selected_lines]
     rv$w <- rv$w[-rv$selected_lines]
     replaceData(proxy, data.table(x = rv$x , y = rv$y, weight = rv$w), resetPaging = FALSE, clearSelection = 'all')  # important
-    rv$selected_lines <- NA
+    rv$selected_lines <- NULL
   })
   
   rmse <- reactive({
@@ -283,6 +339,7 @@ server <- function(input, output) {
     }
   })
   
+
   
 }
 
