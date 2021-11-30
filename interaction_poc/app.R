@@ -42,7 +42,7 @@ draw_dt <- data.table(x = runif(10))
 draw_dt[ , y := x + runif(10)/10]
 draw_dt[ , weight := 1]
 
-marker_radius <- 6
+marker_radius <- 9
 
 # Define UI for application that draws a histogram
 ui <- fluidPage(
