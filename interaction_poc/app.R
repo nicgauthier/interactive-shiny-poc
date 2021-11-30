@@ -59,7 +59,7 @@ ui <- fluidPage(
   p("Notice how when you select a line in the table it affects the color of the corresponding data points in the plot"),
   p("This allow you to quickly identify which lines correspond to which data points"),
   h4("plot interaction") ,
-  p("If you click and drag anyway on the plot , you'll see a dotted box appear."),
+  p("If you click and drag anywhere on the plot , you'll see a dotted box appear."),
   p("You can click and drag to create a box around any data points to select them. Any points that are within the box area will be selected."),
   h5(strong("TRY IT!")),
   p("Once again, the selected data points will change color to give visual feedback about their current state"),
@@ -99,6 +99,8 @@ ui <- fluidPage(
   plotlyOutput("draw_plot"),
   actionButton("add_point", "add new data point"),
   actionButton("remove_point", "remove data point(s)"),
+  br(),
+  br(),
   DTOutput("draw_table"),
   br(),
   valueBox(value = 'rmse_box', subtitle = "RMSE", icon =  'tachometer-alt', color = "#fcba03")
