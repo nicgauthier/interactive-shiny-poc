@@ -14,7 +14,6 @@ library(plotly)
 library(purrr)
 library(readr)
 
-
 valueBox <- function(value, subtitle, icon, color) {
   div(class = "col-lg-3 col-md-6",
       div(class = "panel panel-primary",
@@ -80,8 +79,7 @@ draw_dt[ , weight := 1]
 
 marker_radius <- 9
 
-# Define UI for application that draws a histogram
-ui <- fluidPage(
+help_dialog <- modalDialog(
   h1("Two-way interaction between plots and tables"),
   p("Hi, welcome to this demonstration of two-way interactions between plots and tables in Shiny!"),
   p("The goal of this app is to show some of the ways you can interact with your data through tables and plots and how they can share information with each others"),
@@ -130,17 +128,25 @@ ui <- fluidPage(
   p("If you click and hold the left-click button of your mouse and move in any direction, you will be able to resize the marker."),
   p("Once you let go the left-click button of your mouse, the weight value for this data point will be updated."),
   p("Notice how the new weight value is updated in the table and how it affected the result of the linear model"),
-  
-  fileInput("input_csv", "Import csv", accept = '.csv'),
-  plotlyOutput("draw_plot"),
+  size = "l",
+  easyClose = TRUE
+)
+
+# Define UI for application that draws a histogram
+ui <- fluidPage(
+  br(),
   actionButton("add_point", "add new data point"),
   actionButton("remove_point", "remove data point(s)"),
+  downloadButton("save_session", "save session", icon = icon("arrow-down")),
+  actionButton("load_session", "load session", icon = icon("arrow-up")),
+  actionButton("show_help", "instructions", icon = icon("question")),
+  fileInput("input_csv", label = "", buttonLabel = "Import points from...", placeholder = "csv file", accept = '.csv'),
+  plotlyOutput("draw_plot", height = "600px"),
   br(),
   br(),
   DTOutput("draw_table"),
   br(),
   valueBox(value = 'rmse_box', subtitle = "RMSE", icon =  'tachometer-alt', color = "#fcba03")
-
 )
 
 # Define server logic required to draw a histogram
@@ -172,13 +178,10 @@ server <- function(input, output) {
     selected_lines = NULL
   )
   
-
-
-
-  
   grid <- reactive({
     data.table(x = seq(min(rv$x), max(rv$x), length = 10))
   })
+  
   model <- reactive({
     d <- data.table(x = rv$x, y = rv$y)
     lm(y ~ x, d, weights = rv$w)
@@ -223,15 +226,12 @@ server <- function(input, output) {
 
     
     # plot the shapes and fitted line
-    plot_ly() %>%
-      add_lines(x = grid()$x, y = predict(model(), grid()), color = I("#b75de8")) %>%
-      event_register("plotly_brushed") %>%
+    plot_ly(data = as.data.frame(cbind(x = grid()$x, predict(model(), grid(), interval = "confidence")))) %>%
+    add_lines(x = ~x, y = ~fit, color = I("#b75de8"), name = "LM Fit") %>%
+      add_ribbons(x = ~x, ymin = ~lwr, ymax = ~upr, name = "LM 95% CI", line = list(width=0), fillcolor='rgba(183,93,232,0.2)', visible = "legendonly") %>%
       layout(shapes = circles, dragmode = "select") %>%
-      config(edits = list(shapePosition = TRUE)) 
-  })
-  
-  output$summary <- renderPrint({a
-    summary(model())
+      config(edits = list(shapePosition = TRUE)) %>%
+      event_register("plotly_brushed")
   })
   
   # update x/y reactive values in response to changes in shape anchors
@@ -317,7 +317,6 @@ server <- function(input, output) {
   
   })
   
-  
   observeEvent(input$remove_point, {
     rv$x <- rv$x[-rv$selected_lines]
     rv$y <- rv$y[-rv$selected_lines]
@@ -325,6 +324,38 @@ server <- function(input, output) {
     replaceData(proxy, data.table(x = rv$x , y = rv$y, weight = rv$w), resetPaging = FALSE, clearSelection = 'all')  # important
     rv$selected_lines <- NULL
   })
+  
+  observeEvent(input$show_help, {
+    showModal(help_dialog)
+  })
+  
+  observeEvent(input$load_session, {
+    showModal(
+      modalDialog(
+        title = "Load previous session data",
+        fileInput(inputId = "session_upload", label =  "Session data (json)",
+                  accept = c(".json"), buttonLabel = "Browse...", placeholder = "session file"),
+        easyClose = TRUE
+      )
+    )
+  })
+
+  observeEvent(input$session_upload, {
+    loaded_sesh <- jsonlite::fromJSON(input$session_upload$datapath, simplifyVector = TRUE)
+    rv$x <- loaded_sesh$x
+    rv$y <- loaded_sesh$y
+    rv$w <- loaded_sesh$w
+    rv$selected_lines <- loaded_sesh$selected_lines
+    replaceData(proxy, data.table(x = rv$x , y = rv$y, weight = rv$w), resetPaging = FALSE, clearSelection = 'none')
+    removeModal()
+  })
+
+  output$save_session <- downloadHandler(
+    filename = "session.json",
+    content = function(file) {
+      jsonlite::write_json(list(x = rv$x, y = rv$y, w = rv$w, selected_lines = rv$selected_lines), file, auto_unbox = TRUE)
+    }
+  )
   
   rmse <- reactive({
     sqrt(sum(predict(model(), data.table(x = rv$x)) - rv$y)^2)
