@@ -15,7 +15,7 @@ library(purrr)
 library(readr)
 
 valueBox <- function(value, subtitle, icon, color) {
-  div(class = "col-lg-3 col-md-6",
+  div(class = "row col-md-12",
       div(class = "panel panel-primary",
           div(class = "panel-heading", style = paste0("background-color:", color),
               div(class = "row",
