@@ -175,7 +175,8 @@ server <- function(input, output) {
     x = draw_dt$x,
     y = draw_dt$y,
     w = draw_dt$weight,
-    selected_lines = NULL
+    selected_lines = NULL,
+    ci_visible = FALSE
   )
   
   grid <- reactive({
@@ -226,18 +227,25 @@ server <- function(input, output) {
 
     
     # plot the shapes and fitted line
-    plot_ly(data = as.data.frame(cbind(x = grid()$x, predict(model(), grid(), interval = "confidence")))) %>%
-    add_lines(x = ~x, y = ~fit, color = I("#b75de8"), name = "LM Fit") %>%
-      add_ribbons(x = ~x, ymin = ~lwr, ymax = ~upr, name = "LM 95% CI", line = list(width=0), fillcolor='rgba(183,93,232,0.2)', visible = "legendonly") %>%
-      layout(shapes = circles, dragmode = "select") %>%
-      config(edits = list(shapePosition = TRUE)) %>%
-      event_register("plotly_brushed")
+    p <- plot_ly(data = as.data.frame(cbind(x = grid()$x, predict(model(), grid(), interval = "confidence")))) %>%
+        add_lines(x = ~x, y = ~fit, color = I("#b75de8"), name = "LM Fit") %>%
+        layout(shapes = circles, dragmode = "select") %>%
+        config(edits = list(shapePosition = TRUE)) %>%
+        event_register("plotly_brushed") %>%
+        event_register('plotly_legendclick') 
+    
+    if (rv$ci_visible) {
+      p %>% add_ribbons(x = ~x, ymin = ~lwr, ymax = ~upr, name = "LM 95% CI", line = list(width=0), fillcolor='rgba(183,93,232,0.2)', visible = TRUE)
+    } else {
+      p %>% add_ribbons(x = ~x, ymin = ~lwr, ymax = ~upr, name = "LM 95% CI", line = list(width=0), fillcolor='rgba(183,93,232,0.2)', visible = "legendonly") 
+    }
+    
+    
   })
   
   # update x/y reactive values in response to changes in shape anchors
   observeEvent(event_data("plotly_relayout"),{
     ed <- event_data("plotly_relayout")
-    print(ed)
     shape_anchors <- ed[grepl("^shapes.*anchor$", names(ed))]
     shapes <- ed[grepl("^shapes.*[0-1]$", names(ed))]
  
@@ -253,7 +261,6 @@ server <- function(input, output) {
     
     if (length(shapes) == 4) {
       row_index <- unique(parse_number(names(shapes)) + 1)
-      print(names(shapes))
       pts <-  as.numeric(shapes)
       delta_x <- pts[4] - pts[3]
       delta_y <- pts[1] - pts[2]
@@ -265,6 +272,22 @@ server <- function(input, output) {
    
   })
   
+  observeEvent(event_data("plotly_legendclick"), {
+    ed_leg_click <- event_data("plotly_legendclick")
+    if (ed_leg_click$name == "LM 95% CI") {
+      if (ed_leg_click$visible == "legendonly") {
+        rv$ci_visible <- TRUE
+      } else {
+        rv$ci_visible <- FALSE
+      }
+    }
+  })
+  
+  observeEvent(event_data("plotly_brushed", priority = 'event'),{
+    ed_brushed <- event_data("plotly_brushed")
+    rv$selected_lines <- which(rv$x >= ed_brushed$x[1] & rv$x <= ed_brushed$x[2] & rv$y >= ed_brushed$y[1] & rv$y <= ed_brushed$y[2])
+    selectRows(proxy, rv$selected_lines)
+  })
 
   
   output$draw_table <- renderDT({
@@ -296,15 +319,10 @@ server <- function(input, output) {
 
   })
   
-  observeEvent(event_data("plotly_brushed", priority = 'event'),{
-    ed_brushed <- event_data("plotly_brushed")
-    rv$selected_lines <- which(rv$x >= ed_brushed$x[1] & rv$x <= ed_brushed$x[2] & rv$y >= ed_brushed$y[1] & rv$y <= ed_brushed$y[2])
-    selectRows(proxy, rv$selected_lines)
-  })
+
   
   observeEvent(input$draw_table_rows_selected,{
     rv$selected_lines <- input$draw_table_rows_selected
-    print(rv$selected_lines)
   })
   
   observeEvent(input$add_point, {
@@ -346,6 +364,7 @@ server <- function(input, output) {
     rv$y <- loaded_sesh$y
     rv$w <- loaded_sesh$w
     rv$selected_lines <- loaded_sesh$selected_lines
+    rv$ci_visible <- loaded_sesh$ci_visible
     replaceData(proxy, data.table(x = rv$x , y = rv$y, weight = rv$w), resetPaging = FALSE, clearSelection = 'none')
     removeModal()
   })
@@ -353,7 +372,7 @@ server <- function(input, output) {
   output$save_session <- downloadHandler(
     filename = "session.json",
     content = function(file) {
-      jsonlite::write_json(list(x = rv$x, y = rv$y, w = rv$w, selected_lines = rv$selected_lines), file, auto_unbox = TRUE)
+      jsonlite::write_json(list(x = rv$x, y = rv$y, w = rv$w, selected_lines = rv$selected_lines, ci_visible = rv$ci_visible), file, auto_unbox = TRUE)
     }
   )
   
